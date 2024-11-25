@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -10,17 +11,21 @@ namespace SerializatorFox
 {
     public class ByteSerialeze : IDisposable
     {
-        private readonly Stream stream;
+        private readonly MemoryStream stream;
 
         private readonly ApplicationData appData;
 
         private BinaryWriter writer;
 
-        public ByteSerialeze(Stream stream)
+        private bool isCompress;
+
+        public ByteSerialeze(bool compress = false)
         {
-            this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            stream = new MemoryStream();
 
             writer = new BinaryWriter(stream);
+
+            isCompress = compress;
 
             appData = ApplicationData.Get();
         }
@@ -183,10 +188,32 @@ namespace SerializatorFox
                 SerializeValue(array.GetValue(i), elementType);
             }
         }
+        public byte[] GetData()
+        {
+            byte[] data = stream.ToArray();
+            
+            if (isCompress)
+                data = Compress(data);
 
+            byte[] dataWithFlag = new byte[data.Length + 1];
+            dataWithFlag[0] = (byte)(isCompress ? 1 : 0);
+            Array.Copy(data, 0, dataWithFlag, 1, data.Length);
+
+            return dataWithFlag;
+        }
         public void Dispose()
         {
+            stream.Dispose();
             writer.Dispose();
+        }
+        private static byte[] Compress(byte[] raw)
+        {
+            using var memory = new MemoryStream();
+            using (var gzip = new GZipStream(memory, CompressionMode.Compress))
+            {
+                gzip.Write(raw, 0, raw.Length);
+            }
+            return memory.ToArray();
         }
     }
 }

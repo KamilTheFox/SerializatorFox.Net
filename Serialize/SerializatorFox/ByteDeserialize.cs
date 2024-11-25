@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -14,9 +15,15 @@ namespace SerializatorFox
         private readonly ApplicationData appData;
         private BinaryReader reader;
 
-        public ByteDeserializer(Stream stream)
+        public ByteDeserializer(byte[] data)
         {
-            this.stream = stream ?? throw new ArgumentNullException(nameof(stream));
+            if (data[0] == 1)
+            {
+                byte[] result = new byte[data.Length - 1];
+                Array.Copy(data, 1, result, 0, data.Length - 1);
+                data = Decompress(result);
+            }
+            stream = new MemoryStream(data);
             reader = new BinaryReader(stream);
             appData = ApplicationData.Get();
         }
@@ -222,7 +229,18 @@ namespace SerializatorFox
         }
         public void Dispose()
         {
+            stream.Dispose();
             reader?.Dispose();
+        }
+        private static byte[] Decompress(byte[] compressed)
+        {
+            using var input = new MemoryStream(compressed);
+            using var memory = new MemoryStream();
+            using (var gzip = new GZipStream(input, CompressionMode.Decompress))
+            {
+                gzip.CopyTo(memory);
+            }
+            return memory.ToArray();
         }
     }
 }

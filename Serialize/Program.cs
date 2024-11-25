@@ -2,6 +2,7 @@
 using System.Reflection;
 using System.Numerics;
 using SerializatorFox;
+using System.IO.Compression;
 
 Console.WriteLine("Создание тестового объекта с вложениями из сторонних пространств имен!");
 
@@ -148,18 +149,17 @@ var player = new PlayerData
 byte[] data;
 
 // Сериализация
-using (var stream = new MemoryStream())
+
+using (var serializer = new ByteSerialeze(true))
 {
-    using (var serializer = new ByteSerialeze(stream))
-    {
-        serializer.Serialize(player);
-    }
-    data = stream.ToArray();
+    serializer.Serialize(player);
+    data = serializer.GetData();
 }
+    
 File.Delete("player_save.dat");
-File.Delete("player_save_debug.txt");
 // Сохранение в файл
 File.WriteAllBytes("player_save.dat", data);
+File.WriteAllBytes("player_saveGzip.dat", Compress(data));
 
 // читаемый вывод в текстовый файл для анализа!
 using (var writer = new StreamWriter("player_save_debug.txt"))
@@ -197,12 +197,20 @@ using (var writer = new StreamWriter("player_save_debug.txt"))
 }
 
 // Десериализация
-using (var stream = new MemoryStream(data))
-{ 
-    using (var deserializer = new ByteDeserializer(stream))
-    {
-        var loadedData = deserializer.Deserialize<PlayerData>();
-        Console.WriteLine($"{loadedData}");
-    }
+
+using (var deserializer = new ByteDeserializer(data))
+{
+    var loadedData = deserializer.Deserialize<PlayerData>();
+    Console.WriteLine($"{loadedData}");
 }
 Console.Read();
+
+static byte[] Compress(byte[] raw)
+{
+    using var memory = new MemoryStream();
+    using (var gzip = new GZipStream(memory, CompressionMode.Compress))
+    {
+        gzip.Write(raw, 0, raw.Length);
+    }
+    return memory.ToArray();
+}
