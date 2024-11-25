@@ -102,25 +102,6 @@ namespace SerializatorFox
             {
                 return DeserializeArray(type.GetElementType());
             }
-
-            // Примитивные типы
-            if (type == typeof(byte)) return reader.ReadByte();
-            if (type == typeof(sbyte)) return reader.ReadSByte();
-            if (type == typeof(short)) return reader.ReadInt16();
-            if (type == typeof(ushort)) return reader.ReadUInt16();
-            if (type == typeof(int)) return reader.ReadInt32();
-            if (type == typeof(uint)) return reader.ReadUInt32();
-            if (type == typeof(long)) return reader.ReadInt64();
-            if (type == typeof(ulong)) return reader.ReadUInt64();
-            if (type == typeof(float)) return reader.ReadSingle();
-            if (type == typeof(double)) return reader.ReadDouble();
-            if (type == typeof(decimal)) return reader.ReadDecimal();
-            if (type == typeof(bool)) return reader.ReadBoolean();
-            if (type == typeof(char)) return reader.ReadChar();
-            if (type == typeof(string)) return reader.ReadString();
-            if (type == typeof(DateTime)) return new DateTime(reader.ReadInt64());
-            if (type == typeof(TimeSpan)) return new TimeSpan(reader.ReadInt64());
-            if (type == typeof(Guid)) return new Guid(reader.ReadBytes(16));
             if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
             {
                 Type elementType = type.GetGenericArguments()[0];
@@ -138,6 +119,33 @@ namespace SerializatorFox
 
                 return list;
             }
+
+            // Примитивные типы
+            if (type == typeof(byte)) return reader.ReadByte();
+            if (type == typeof(sbyte)) return reader.ReadSByte();
+            if (type == typeof(short)) return reader.ReadInt16();
+            if (type == typeof(ushort)) return reader.ReadUInt16();
+            if (type == typeof(int)) return reader.ReadInt32();
+            if (type == typeof(uint)) return reader.ReadUInt32();
+            if (type == typeof(long)) return reader.ReadInt64();
+            if (type == typeof(ulong)) return reader.ReadUInt64();
+            if (type == typeof(float)) return reader.ReadSingle();
+            if (type == typeof(double)) return reader.ReadDouble();
+            if (type == typeof(decimal)) return reader.ReadDecimal();
+            if (type == typeof(bool)) return reader.ReadBoolean();
+            if (type == typeof(char)) return reader.ReadChar();
+            if (type == typeof(string))
+            {
+                int length = reader.ReadInt32();
+                byte[] invertedBytes = reader.ReadBytes(length);
+                byte[] restoredBytes = invertedBytes.Select(b => (byte)~b).ToArray();
+                string restoredString = Encoding.UTF8.GetString(restoredBytes);
+                return restoredString;
+            }
+            if (type == typeof(DateTime)) return new DateTime(reader.ReadInt64());
+            if (type == typeof(TimeSpan)) return new TimeSpan(reader.ReadInt64());
+            if (type == typeof(Guid)) return new Guid(reader.ReadBytes(16));
+            
 
             // Enum
             if (type.IsEnum)

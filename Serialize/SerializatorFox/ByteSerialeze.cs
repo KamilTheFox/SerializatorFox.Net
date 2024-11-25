@@ -106,7 +106,13 @@ namespace SerializatorFox
             else if (type == typeof(char)) writer.Write((char)value);
 
             // Строки и даты
-            else if (type == typeof(string)) writer.Write((string)value);
+            else if (type == typeof(string))
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes((string)value);
+                byte[] invertedBytes = bytes.Select(b => (byte)~b).ToArray();
+                writer.Write(invertedBytes.Length);
+                writer.Write(invertedBytes);
+            }
             else if (type == typeof(DateTime)) writer.Write(((DateTime)value).Ticks);
             else if (type == typeof(TimeSpan)) writer.Write(((TimeSpan)value).Ticks);
 
