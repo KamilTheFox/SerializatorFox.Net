@@ -10,14 +10,19 @@ namespace SerializatorFox
 {
     internal class ApplicationData
     {
+        public const byte NULL_FLAG = 0b1000_0000;
+        public const byte RESERVE_FLAG = 0b0100_0000;
+        public const byte COLLISION_MASK = 0b0011_1111;
+
         private static Dictionary<Assembly, ApplicationData> AssemblysInstance;
 
         private readonly Dictionary<Type, byte[]> typeHashes;
-        private readonly Dictionary<byte[], Type> typesByHash;
+
+        private readonly Dictionary<byte[], List<Type>> typesByHash;
 
         private readonly Dictionary<string, byte[]> fieldsHashes;
 
-        private readonly Dictionary<byte[], string> fieldsByHash;
+        private readonly Dictionary<byte[], List<string>> fieldsByHash;
 
         private static readonly object _lock = new object();
 
@@ -47,8 +52,8 @@ namespace SerializatorFox
         {
             typeHashes = new Dictionary<Type, byte[]>();
             fieldsHashes = new Dictionary<string, byte[]>();
-            typesByHash = new Dictionary<byte[], Type>(new ByteArrayComparer());
-            fieldsByHash = new Dictionary<byte[], string>(new ByteArrayComparer());
+            typesByHash = new Dictionary<byte[], List<Type>>(new ByteArrayComparer());
+            fieldsByHash = new Dictionary<byte[], List<string>>(new ByteArrayComparer());
 
             foreach (Type type in assemblyCurrent.GetTypes().
                 Where(type => type.GetCustomAttribute<SerializableTypeAttribute>() != null))
@@ -63,14 +68,8 @@ namespace SerializatorFox
 
             var hash = ComputeHash(type.FullName);
 
-            if (typesByHash.ContainsKey(hash))
-            {
-                Console.WriteLine($"Коллизия! {type.FullName} Hash - {hash}");
-            }
-
             typeHashes[type] = hash;
-            typesByHash[hash] = type;
-
+            SetCollisionType(hash, type);
             // Обработка полей
             foreach (var field in GetSerializableFields(type))
             {
@@ -78,26 +77,7 @@ namespace SerializatorFox
                 ProcessFieldType(field, depth);
             }
         }
-        private void RegisterField(FieldInfo field)
-        {
-            string fieldName = field.Name;
-
-            // Если поле уже зарегистрировано - пропускаем
-            if (fieldsHashes.ContainsKey(fieldName))
-                return;
-
-            var fieldHash = ComputeHash(fieldName);
-
-            // Проверяем коллизии
-            if (fieldsByHash.ContainsKey(fieldHash))
-            {
-                Console.WriteLine($"Коллизия! {fieldName} Hash - {fieldHash}");
-                return;
-            }
-            // Регистрируем хеши
-            fieldsHashes[fieldName] = fieldHash;
-            fieldsByHash[fieldHash] = fieldName;
-        }
+        
         public static ApplicationData Get()
         {
             Assembly assembly = Assembly.GetExecutingAssembly();
@@ -114,7 +94,12 @@ namespace SerializatorFox
                 return AssemblysInstance[assembly];
             }
         }
-
+        public bool IsPrimitiveType(Type type)
+        {
+            return type.IsPrimitive || type == typeof(string) ||
+                   type == typeof(DateTime) || type == typeof(TimeSpan) ||
+                   type == typeof(Guid) || type == typeof(decimal);
+        }
         public byte[] GetTypeHash(Type type)
         {
             if (!typeHashes.TryGetValue(type, out byte[] hash))
@@ -125,19 +110,28 @@ namespace SerializatorFox
             return hash;
         }
 
-        public Type GetTypeByHash(byte[] hash)
+        public Type GetTypeByHash(byte[] hash, byte slotCollision)
         {
+            slotCollision = (byte)(slotCollision & COLLISION_MASK);
             if (hash == null || hash.Length == 0)
             {
                 throw new ArgumentException("Hash cannot be null or empty");
             }
 
-            if (!typesByHash.TryGetValue(hash, out Type type))
+            if (!typesByHash.TryGetValue(hash, out List<Type> type))
             {
                 throw new CustomAttributeFormatException(
                     $"Hash {BitConverter.ToString(hash)} is not associated with any serializable type");
             }
-            return type;
+            if(type.Count > 63)
+            {
+                throw new OverflowException("Too many collisions for hash!");
+            }
+            if(type.Count <= slotCollision)
+            {
+                throw new OverflowException("Going beyond the registered collisions!");
+            }
+            return type[slotCollision];
         }
 
         public byte[] GetPropertyHash(string name)
@@ -150,14 +144,23 @@ namespace SerializatorFox
             return hash;
         }
 
-        public string GetFieldNameByHash(byte[] hash)
+        public string GetFieldNameByHash(byte[] hash, byte indexCollision)
         {
-            if (!fieldsByHash.TryGetValue(hash, out string name))
+            if (!fieldsByHash.TryGetValue(hash, out List<string> name))
             {
+                return "";
                 throw new CustomAttributeFormatException(
                     $"Hash {BitConverter.ToString(hash)} is not associated with any property");
             }
-            return name;
+            if (name.Count > 63)
+            {
+                throw new OverflowException("Too many collisions for hash!");
+            }
+            if (name.Count <= indexCollision)
+            {
+                throw new OverflowException("Going beyond the registered collisions!");
+            }
+            return name[indexCollision];
         }
 
         public bool IsFieldSerializable(FieldInfo field) => !IsFieldIgnored(field);
@@ -185,8 +188,6 @@ namespace SerializatorFox
             depthValue = attribute?.DeepSerialization ?? false;
             return attribute != null;
         }
-
-
 
         private void ProcessFieldType(FieldInfo field, bool currentDepth)
         {
@@ -262,6 +263,66 @@ namespace SerializatorFox
             return h1;
         }
 
+        private void SetCollisionType(byte[] hash, Type type)
+        {
+            if(!typesByHash.ContainsKey(hash))
+            {
+                typesByHash.Add(hash, new List<Type>() { type });
+            }
+            if(typesByHash[hash].Count + 1 > 63)
+            {
+                throw new OverflowException("Too many collisions for hash!");
+            }
+            // Если тип уже зарегистрирован - пропускаем
+            if (typesByHash[hash].Contains(type)) return;
+            typesByHash[hash].Add(type);
+            typesByHash[hash].Sort();
+        }
+        private void RegisterField(FieldInfo field)
+        {
+            string fieldName = field.Name;
+
+            // Если поле уже зарегистрировано - пропускаем
+            if (fieldsHashes.ContainsKey(fieldName))
+                return;
+
+            var fieldHash = ComputeHash(fieldName);
+
+            if (!fieldsByHash.ContainsKey(fieldHash))
+            {
+                fieldsByHash.Add(fieldHash, new List<string>() { fieldName });
+            }
+            else
+            {
+                fieldsByHash[fieldHash].Add(fieldName);
+                fieldsByHash[fieldHash].Sort();
+            }
+            // Регистрируем хеш
+            fieldsHashes[fieldName] = fieldHash;
+            
+        }
+        public byte GetCollisionIndexType(byte[] hash, Type type)
+        {
+            if(!typesByHash.ContainsKey(hash))
+            {
+                throw new NullReferenceException("No type is registered!");
+            }
+            return (byte)typesByHash[hash].IndexOf(type);
+        }
+        public byte GetCollisionIndexField(byte[] hash, string nameField)
+        {
+            if (!fieldsByHash.ContainsKey(hash))
+            {
+                throw new NullReferenceException("No type is registered!");
+            }
+            return (byte)fieldsByHash[hash].IndexOf(nameField);
+        }
+        private static string GenerateRandomString(int length, Random rand)
+        {
+            const string chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+            return new string(Enumerable.Repeat(chars, length)
+                .Select(s => s[rand.Next(s.Length)]).ToArray());
+        }
         public void CheckData()
         {
             Console.WriteLine("=== Type Hashes ===");
@@ -273,7 +334,7 @@ namespace SerializatorFox
             Console.WriteLine("\n=== Types By Hash ===");
             foreach (var pair in typesByHash)
             {
-                Console.WriteLine($"{ByteArrayToString(pair.Key)}: {pair.Value.Name}");
+                Console.WriteLine($"{ByteArrayToString(pair.Key)}: {string.Join(", ", pair.Value)}");
             }
 
             Console.WriteLine("\n=== Property Hashes ===");

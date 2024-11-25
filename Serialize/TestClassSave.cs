@@ -11,6 +11,8 @@ namespace Test
         public int level;
         public float health;
 
+        public Dictionary<string, Achievement> achievements;
+
         [field: IgnoreSerialize]
         public Vector3 Position { get; set; }
 
@@ -18,13 +20,23 @@ namespace Test
         public Inventory playerInventory;
         public override string ToString()
         {
+            var achievementsString = achievements == null
+            ? "\n    No achievements"
+            : string.Join("", achievements.Select(kvp =>
+            $"\n    ├─ {kvp.Key}" +
+            $"\n    │  ├─ Title: {kvp.Value.Title}" +
+            $"\n    │  ├─ Progress: {kvp.Value.Progress}/{kvp.Value.MaxProgress}" +
+            $"\n    │  ├─ Status: {(kvp.Value.IsUnlocked ? "✓ Completed" : "⋯ In Progress")}" +
+            $"\n    │  └─ Unlock Date: {(kvp.Value.IsUnlocked ? kvp.Value.UnlockDate.ToString("d") : "Not yet")}"
+            ));
             return $"\nPlayer Data:" +
                    $"\n  Nickname: {nickname}" +
                    $"\n  Прозвище: {прOзвище}" +
                    $"\n  Level: {level}" +
                    $"\n  Health: {health:F1}" +
                    $"\n  Position: {Position} (non-serialized)" +
-                   $"\n  Inventory: {playerInventory}";
+                   $"\n  Inventory: {playerInventory}" +
+                   $"\n  Achievements ({achievements?.Count ?? 0}):{achievementsString}";
         }
     }
 
@@ -80,7 +92,21 @@ namespace Test
             return $"[QUEST:{Type}] {Name} x{Count} (Weight: {Weight:F1}) - Quest: {QuestId} {(IsCompleted ? "[✓]" : "[...]")}";
         }
     }
+    [SerializableType]
+    public class Achievement
+    {
+        public string Title { get; set; }
+        public string Description { get; set; }
+        public bool IsUnlocked { get; set; }
+        public DateTime UnlockDate { get; set; }
+        public int Progress { get; set; }
+        public int MaxProgress { get; set; }
 
+        public override string ToString()
+        {
+            return $"{Title} - {Progress}/{MaxProgress} {(IsUnlocked ? "✓" : "...")} [{UnlockDate:d}]";
+        }
+    }
     public enum ItemType
     {
         Weapon,

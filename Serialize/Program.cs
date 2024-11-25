@@ -27,7 +27,123 @@ var player = new PlayerData
                 IsCompleted = false
             }
         }
-    }
+    },
+    achievements = new()
+        {
+            {
+                "FirstBattle",
+                new Achievement
+                {
+                    Title = "Первый бой",
+                    Description = "Участвуй в первом сражении",
+                    IsUnlocked = true,
+                    UnlockDate = new DateTime(2024, 1, 15),
+                    Progress = 1,
+                    MaxProgress = 1
+                }
+            },
+            {
+                "ItemCollector",
+                new Achievement
+                {
+                    Title = "Коллекционер",
+                    Description = "Собери 100 предметов",
+                    IsUnlocked = false,
+                    Progress = 45,
+                    MaxProgress = 100
+                }
+            },
+            {
+                "DragonSlayer",
+                new Achievement
+                {
+                    Title = "Убийца драконов",
+                    Description = "Победи древнего дракона",
+                    IsUnlocked = false,
+                    Progress = 0,
+                    MaxProgress = 1
+                }
+            },
+            {
+                "WealthyMerchant",
+                new Achievement
+                {
+                    Title = "Богатый торговец",
+                    Description = "Накопи 10000 золота",
+                    IsUnlocked = false,
+                    Progress = 3500,
+                    MaxProgress = 10000
+                }
+            },
+            {
+                "ExplorerNovice",
+                new Achievement
+                {
+                    Title = "Начинающий исследователь",
+                    Description = "Исследуй 5 новых локаций",
+                    IsUnlocked = true,
+                    UnlockDate = new DateTime(2024, 1, 20),
+                    Progress = 5,
+                    MaxProgress = 5
+                }
+            },
+            {
+                "QuestMaster",
+                new Achievement
+                {
+                    Title = "Мастер заданий",
+                    Description = "Выполни 50 квестов",
+                    IsUnlocked = false,
+                    Progress = 23,
+                    MaxProgress = 50
+                }
+            },
+            {
+                "ArmorCollector",
+                new Achievement
+                {
+                    Title = "Бронированный",
+                    Description = "Собери все виды брони",
+                    IsUnlocked = false,
+                    Progress = 3,
+                    MaxProgress = 10
+                }
+            },
+            {
+                "MagicMaster",
+                new Achievement
+                {
+                    Title = "Мастер магии",
+                    Description = "Изучи 20 заклинаний",
+                    IsUnlocked = false,
+                    Progress = 8,
+                    MaxProgress = 20
+                }
+            },
+            {
+                "Survivor",
+                new Achievement
+                {
+                    Title = "Выживший",
+                    Description = "Выживи 30 дней",
+                    IsUnlocked = true,
+                    UnlockDate = new DateTime(2024, 2, 1),
+                    Progress = 30,
+                    MaxProgress = 30
+                }
+            },
+            {
+                "Fisherman",
+                new Achievement
+                {
+                    Title = "Рыбак",
+                    Description = "Поймай 50 рыб",
+                    IsUnlocked = false,
+                    Progress = 12,
+                    MaxProgress = 50
+                }
+            }
+        }
 };
 byte[] data;
 
@@ -79,6 +195,7 @@ using (var writer = new StreamWriter("player_save_debug.txt"))
         writer.WriteLine();
     }
 }
+
 // Десериализация
 using (var stream = new MemoryStream(data))
 { 

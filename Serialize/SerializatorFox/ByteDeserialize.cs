@@ -23,53 +23,9 @@ namespace SerializatorFox
 
         public T Deserialize<T>()
         {
-            // Читаем хеш типа
-            byte[] typeHash = reader.ReadBytes(4);
-            Type actualType = appData.GetTypeByHash(typeHash);
-
-            // Проверяем соответствие типов
-            if (actualType != typeof(T))
-                throw new TypeAccessException($"Type mismatch. Expected {typeof(T)}, got {actualType}");
-
-            return (T)DeserializeObject(actualType);
-        }
-
-        private object DeserializeObject(Type type)
-        {
-            if (type.IsInterface)
-            {
-                // Читаем имя реального типа из потока
-                byte[] hash = reader.ReadBytes(4);
-                // Получаем реальный тип по хешу
-                type = appData.GetTypeByHash(hash);
-
-                if (type == null)
-                    throw new TypeAccessException($"Cannot find type By Hash {hash}");
-            }
-
-            // Создаём экземпляр объекта
-            object instance = Activator.CreateInstance(type);
-
-            // Получаем все сериализуемые поля
-            foreach (var field in type.GetRuntimeFields())
-            {
-                if (!appData.IsFieldSerializable(field))
-                    continue;
-
-                // Читаем хеш поля
-                byte[] fieldHash = reader.ReadBytes(4);
-                string fieldName = appData.GetFieldNameByHash(fieldHash);
-
-                // Проверяем соответствие полей
-                if (field.Name != fieldName)
-                    throw new TypeAccessException($"Field mismatch. Expected {field.Name}, got {fieldName}");
-
-                // Десериализуем значение поля
-                object value = DeserializeValue(field.FieldType);
-                field.SetValue(instance, value);
-            }
-
-            return instance;
+            var (typeHash, collisionIndex) = ReadTypeIdentifier();
+            ValidateType<T>(typeHash, collisionIndex);
+            return (T)DeserializeObject(typeof(T));
         }
 
         private Array DeserializeArray(Type elementType)
@@ -87,40 +43,82 @@ namespace SerializatorFox
                 array.SetValue(value, i);
             }
 
-            return array;
+            return array;  
         }
 
         private object DeserializeValue(Type type)
         {
-            // Проверяем на null
-            bool isNotNull = reader.ReadBoolean();
-            if (!isNotNull)
-                return null;
+            var collectionResult = DeserializeCollection(type);
+            if (collectionResult != null) return collectionResult;
 
-            // Массивы
-            if (type.IsArray)
+            if (appData.IsPrimitiveType(type))
+                return DeserializePrimitive(type);
+
+            if (type.IsEnum)
+                return Enum.ToObject(type, reader.ReadInt32());
+
+            if (type.IsClass || type.IsValueType || type.IsInterface)
+                return DeserializeComplexType(type);
+
+            throw new TypeAccessException($"Unsupported type: {type.FullName}");
+        }
+        private object DeserializeCollection(Type type)
+        {
+            if (type.IsArray) return DeserializeArray(type.GetElementType());
+            if (type.IsGenericType)
             {
-                return DeserializeArray(type.GetElementType());
+                if (type.GetGenericTypeDefinition() == typeof(List<>))
+                    return DeserializeList(type);
+                if (type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+                    return DeserializeDictionary(type);
             }
-            if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+            return null;
+        }
+
+        private object DeserializeDictionary(Type type)
+        {
+            var keyType = type.GetGenericArguments()[0];
+            var valueType = type.GetGenericArguments()[1];
+            int count = reader.ReadInt32();
+
+            IDictionary dict = (IDictionary)Activator.CreateInstance(type);
+            for (int i = 0; i < count; i++)
             {
-                Type elementType = type.GetGenericArguments()[0];
-                int count = reader.ReadInt32();
+                var key = DeserializeValue(keyType);
+                var value = DeserializeValue(valueType);
+                dict.Add(key, value);
+            }
+            return dict;
+        }
 
-                // Создаём список нужного типа
-                IList list = (IList)Activator.CreateInstance(type);
+        private object DeserializeList(Type type)
+        {
+            Type elementType = type.GetGenericArguments()[0];
+            int count = reader.ReadInt32();
 
-                // Десериализуем каждый элемент
-                for (int i = 0; i < count; i++)
-                {
-                    object item = DeserializeValue(elementType);
-                    list.Add(item);
-                }
+            // Создаём список нужного типа
+            IList list = (IList)Activator.CreateInstance(type);
 
-                return list;
+            // Десериализуем каждый элемент
+            for (int i = 0; i < count; i++)
+            {
+                object item = DeserializeValue(elementType);
+                list.Add(item);
             }
 
-            // Примитивные типы
+            return list;
+        }
+
+        private string DeserializeString()
+        {
+            int length = reader.ReadInt32();
+            byte[] invertedBytes = reader.ReadBytes(length);
+            byte[] restoredBytes = invertedBytes.Select(b => (byte)~b).ToArray();
+            return Encoding.UTF8.GetString(restoredBytes);
+        }
+        
+        private object DeserializePrimitive(Type type)
+        {
             if (type == typeof(byte)) return reader.ReadByte();
             if (type == typeof(sbyte)) return reader.ReadSByte();
             if (type == typeof(short)) return reader.ReadInt16();
@@ -134,34 +132,94 @@ namespace SerializatorFox
             if (type == typeof(decimal)) return reader.ReadDecimal();
             if (type == typeof(bool)) return reader.ReadBoolean();
             if (type == typeof(char)) return reader.ReadChar();
-            if (type == typeof(string))
-            {
-                int length = reader.ReadInt32();
-                byte[] invertedBytes = reader.ReadBytes(length);
-                byte[] restoredBytes = invertedBytes.Select(b => (byte)~b).ToArray();
-                string restoredString = Encoding.UTF8.GetString(restoredBytes);
-                return restoredString;
-            }
+            if (type == typeof(string)) return DeserializeString();
+            if (type == typeof(int)) return reader.ReadInt32();
             if (type == typeof(DateTime)) return new DateTime(reader.ReadInt64());
             if (type == typeof(TimeSpan)) return new TimeSpan(reader.ReadInt64());
             if (type == typeof(Guid)) return new Guid(reader.ReadBytes(16));
-            
-
-            // Enum
-            if (type.IsEnum)
-                return Enum.ToObject(type, reader.ReadInt32());
-
-            // Объекты
-            if (type.IsClass || type.IsValueType || type.IsInterface)
-            {
-                byte[] typeHash = reader.ReadBytes(4);
-                Type actualType = appData.GetTypeByHash(typeHash);
-                return DeserializeObject(actualType);
-            }
-
-            throw new TypeAccessException($"Unsupported type: {type.FullName}");
+            return null;
+        }
+        private (byte[] hash, byte collisionIndex) ReadTypeIdentifier()
+        {
+            return (reader.ReadBytes(4), reader.ReadByte());
         }
 
+        private void ValidateType<T>(byte[] typeHash, byte collisionIndex)
+        {
+            Type actualType = appData.GetTypeByHash(typeHash, collisionIndex);
+            if (actualType != typeof(T))
+                throw new TypeAccessException($"Type mismatch. Expected {typeof(T)}, got {actualType}");
+        }
+
+        private object DeserializeObject(Type type)
+        {
+            if (type.IsInterface)
+            {
+                return DeserializeInterface(type);
+            }
+
+            object instance = Activator.CreateInstance(type);
+            DeserializeFields(type, instance);
+            return instance;
+        }
+
+        private object DeserializeInterface(Type type)
+        {
+            var (hash, collisionIndex) = ReadTypeIdentifier();
+
+            if (IsNull(collisionIndex))
+                return null;
+
+            Type actualType = GetTypeFromHash(hash, collisionIndex);
+            return DeserializeObject(actualType);
+        }
+
+        private bool IsNull(byte value) => (value & ApplicationData.NULL_FLAG) != 0;
+
+        private Type GetTypeFromHash(byte[] hash, byte collisionIndex)
+        {
+            var type = appData.GetTypeByHash(hash, (byte)(collisionIndex & ApplicationData.COLLISION_MASK));
+            if (type == null)
+                throw new TypeAccessException($"Cannot find type By Hash {hash}");
+            return type;
+        }
+
+        private void DeserializeFields(Type type, object instance)
+        {
+            foreach (var field in type.GetRuntimeFields().Where(f => appData.IsFieldSerializable(f)))
+            {
+                DeserializeField(field, instance);
+            }
+        }
+
+        private void DeserializeField(FieldInfo field, object instance)
+        {
+            var (fieldHash, contextByte) = ReadFieldIdentifier();
+            ValidateFieldName(field, fieldHash, contextByte);
+
+            object value = IsNull(contextByte) ? null : DeserializeValue(field.FieldType);
+            field.SetValue(instance, value);
+        }
+
+        private (byte[] hash, byte contextByte) ReadFieldIdentifier()
+        {
+            return (reader.ReadBytes(4), reader.ReadByte());
+        }
+
+        private void ValidateFieldName(FieldInfo field, byte[] fieldHash, byte contextByte)
+        {
+            byte indexCollision = (byte)(contextByte & ApplicationData.COLLISION_MASK);
+            string fieldName = appData.GetFieldNameByHash(fieldHash, indexCollision);
+
+            if (field.Name != fieldName)
+                throw new TypeAccessException($"Field mismatch. Expected {field.Name}, got {fieldName}");
+        }
+        private object DeserializeComplexType(Type type)
+        {
+            var (typeHash, collisionIndex) = ReadTypeIdentifier();
+            Type actualType = appData.GetTypeByHash(typeHash, collisionIndex);
+            return DeserializeObject(actualType);
+        }
         public void Dispose()
         {
             reader?.Dispose();

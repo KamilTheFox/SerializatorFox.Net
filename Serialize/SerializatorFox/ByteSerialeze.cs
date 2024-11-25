@@ -26,35 +26,36 @@ namespace SerializatorFox
         }
         public void Serialize<T>(T obj)
         {
-            byte[] typeHash = appData.GetTypeHash(typeof(T));
+            Type type = typeof(T);
+            byte[] actualTypeHash = appData.GetTypeHash(type);
+            writer.Write(actualTypeHash);
 
-            writer.Write(typeHash);
-
-            SerializeObject(obj);
-        }
-
-        private void SerializeObject<T>(T obj)
-        {
-            foreach (var field in typeof(T).GetRuntimeFields())
+            if (obj == null)
             {
-                if (!appData.IsFieldSerializable(field))
-                    continue;
-
-                byte[] fieldHash = appData.GetPropertyHash(field.Name);
-
-                writer.Write(fieldHash);
-
-                SerializeValue(field.GetValue(obj), field.FieldType);
+                writer.Write(ApplicationData.NULL_FLAG);
             }
+            byte collisionIndex = appData.GetCollisionIndexType(actualTypeHash, type);
+            writer.Write(collisionIndex);
+            SerializeObject(obj, type);
         }
-        private void SerializeObject(object obj)
-        {
-            Type actualType = obj.GetType(); // Получаем реальный тип
 
-            // Если тип реализует интерфейс, сохраняем информацию о реальном типе
-            if (actualType.GetInterfaces().Any())
+        private void SerializeObject(object obj, Type expectedType)
+        {
+            if (obj == null)
             {
-                writer.Write(appData.GetTypeHash(actualType));
+                writer.Write(ApplicationData.NULL_FLAG);
+                return;
+            }
+
+            Type actualType = obj.GetType();
+
+            // Если тип является интерфейсом или базовым классом
+            if (expectedType != actualType)
+            {
+                byte[] actualTypeHash = appData.GetTypeHash(actualType);
+                writer.Write(actualTypeHash);
+                byte collisionIndex = appData.GetCollisionIndexType(actualTypeHash, actualType);
+                writer.Write(collisionIndex);
             }
 
             foreach (var field in actualType.GetRuntimeFields())
@@ -63,22 +64,26 @@ namespace SerializatorFox
                     continue;
 
                 byte[] fieldHash = appData.GetPropertyHash(field.Name);
-
                 writer.Write(fieldHash);
 
-                SerializeValue(field.GetValue(obj), field.FieldType);
+                object value = field.GetValue(obj);
+
+                if (value == null)
+                {
+                    writer.Write(ApplicationData.NULL_FLAG);
+                }
+                else
+                {
+                    byte collisionIndex = appData.GetCollisionIndexField(fieldHash, field.Name);
+                    byte infoIndex = (byte)(collisionIndex & ApplicationData.COLLISION_MASK);
+                    writer.Write(infoIndex);
+                    SerializeValue(value, field.FieldType);
+                }
             }
         }
 
         private void SerializeValue(object value, Type type)
         {
-            if (value == null)
-            {
-                writer.Write(false); // isNull flag
-                return;
-            }
-
-            writer.Write(true); // not null
 
             if (type.IsArray)
             {
@@ -137,13 +142,28 @@ namespace SerializatorFox
                     SerializeValue(item, elementType);
                 }
             }
+            else if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(Dictionary<,>))
+            {
+                var keyType = type.GetGenericArguments()[0];
+                var valueType = type.GetGenericArguments()[1];
+                var dict = (IDictionary)value;
+
+                writer.Write(dict.Count);
+                foreach (DictionaryEntry entry in dict)
+                {
+                    SerializeValue(entry.Key, keyType);
+                    SerializeValue(entry.Value, valueType);
+                }
+            }
 
             // Объекты
             else if (type.IsClass || type.IsValueType || type.IsInterface)
             {
                 byte[] typeHash = appData.GetTypeHash(type);
                 writer.Write(typeHash);
-                SerializeObject(value);
+                byte collisionIndex = appData.GetCollisionIndexType(typeHash, type);
+                writer.Write(collisionIndex);
+                SerializeObject(value, type);
             }
 
             else
