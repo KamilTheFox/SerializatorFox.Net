@@ -56,7 +56,7 @@ namespace SerializatorFox
             fieldsByHash = new Dictionary<byte[], List<string>>(new ByteArrayComparer());
 
             foreach (Type type in assemblyCurrent.GetTypes().
-                Where(type => type.GetCustomAttribute<SerializableTypeAttribute>() != null))
+                Where(type => type.GetCustomAttribute<System.SerializableAttribute>() != null))
             {
                 RegisterType(type);
             }
@@ -105,7 +105,7 @@ namespace SerializatorFox
             if (!typeHashes.TryGetValue(type, out byte[] hash))
             {
                 throw new CustomAttributeFormatException(
-                    $"Type {type.FullName} is not marked with [SerializableType] attribute");
+                    $"Type {type.FullName} is not marked with [Serializable] attribute");
             }
             return hash;
         }
