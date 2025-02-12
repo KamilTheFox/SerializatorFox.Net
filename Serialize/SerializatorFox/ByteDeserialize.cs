@@ -15,7 +15,7 @@ namespace SerializatorFox
         private readonly ApplicationData appData;
         private BinaryReader reader;
 
-        public ByteDeserializer(byte[] data)
+        public ByteDeserializer(Assembly assembly, byte[] data)
         {
             if (data[0] == 1)
             {

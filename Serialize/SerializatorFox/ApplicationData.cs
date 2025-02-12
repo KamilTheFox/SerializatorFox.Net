@@ -77,10 +77,11 @@ namespace SerializatorFox
                 ProcessFieldType(field, depth);
             }
         }
-        
-        public static ApplicationData Get()
+
+        public static ApplicationData Get(Assembly assembly = null)
         {
-            Assembly assembly = Assembly.GetCallingAssembly();
+            if(assembly == null)
+                assembly = Assembly.GetCallingAssembly();
             lock (_lock)
             {
                 if (AssemblysInstance == null)

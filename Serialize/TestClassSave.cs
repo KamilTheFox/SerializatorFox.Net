@@ -4,6 +4,7 @@ using SerializatorFox;
 namespace Test
 {
     [SerializableType]
+    [System.Serializable]
     public class PlayerData
     {
         public string nickname;
@@ -41,6 +42,7 @@ namespace Test
     }
 
     [SerializableType]
+    [System.Serializable]
     public class Inventory
     {
         public List<IItem> items;
@@ -63,6 +65,7 @@ namespace Test
     }
 
     [SerializableType]
+    [System.Serializable]
     public class Item : IItem
     {
         public string Name { get; set; }
@@ -76,6 +79,7 @@ namespace Test
         }
     }
     [SerializableType]
+    [System.Serializable]
     public class QuestItem : IItem
     {
         public string Name { get; set; }
@@ -93,6 +97,7 @@ namespace Test
         }
     }
     [SerializableType]
+    [System.Serializable]
     public class Achievement
     {
         public string Title { get; set; }

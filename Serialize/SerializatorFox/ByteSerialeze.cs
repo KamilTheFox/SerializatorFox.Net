@@ -18,8 +18,8 @@ namespace SerializatorFox
         private BinaryWriter writer;
 
         private bool isCompress;
-
-        public ByteSerialeze(bool compress = false)
+         
+        public ByteSerialeze(Assembly assembly, bool compress = false)
         {
             stream = new MemoryStream();
 
@@ -27,7 +27,7 @@ namespace SerializatorFox
 
             isCompress = compress;
 
-            appData = ApplicationData.Get();
+            appData = ApplicationData.Get(assembly);
         }
         public void Serialize<T>(T obj)
         {
