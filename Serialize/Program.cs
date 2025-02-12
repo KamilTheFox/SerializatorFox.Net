@@ -196,8 +196,7 @@ using (var writer = new StreamWriter("player_save_debug.txt"))
     }
 }
 
-// Десериализация
-
+// Десериализация        
 using (var deserializer = new ByteDeserializer(data))
 {
     var loadedData = deserializer.Deserialize<PlayerData>();

@@ -80,7 +80,7 @@ namespace SerializatorFox
         
         public static ApplicationData Get()
         {
-            Assembly assembly = Assembly.GetExecutingAssembly();
+            Assembly assembly = Assembly.GetCallingAssembly();
             lock (_lock)
             {
                 if (AssemblysInstance == null)
