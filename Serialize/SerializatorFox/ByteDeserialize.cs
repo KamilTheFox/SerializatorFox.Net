@@ -15,7 +15,7 @@ namespace SerializatorFox
         private readonly ApplicationData appData;
         private BinaryReader reader;
 
-        public ByteDeserializer(Assembly assembly, byte[] data)
+        public ByteDeserializer(byte[] data)
         {
             if (data[0] == 1)
             {
@@ -120,8 +120,7 @@ namespace SerializatorFox
         {
             int length = reader.ReadInt32();
             byte[] invertedBytes = reader.ReadBytes(length);
-            byte[] restoredBytes = invertedBytes.Select(b => (byte)~b).ToArray();
-            return Encoding.UTF8.GetString(restoredBytes);
+            return Encoding.UTF8.GetString(invertedBytes);
         }
         
         private object DeserializePrimitive(Type type)

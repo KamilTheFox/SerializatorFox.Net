@@ -19,7 +19,7 @@ namespace SerializatorFox
 
         private bool isCompress;
          
-        public ByteSerialeze(Assembly assembly, bool compress = false)
+        public ByteSerialeze( bool compress = false)
         {
             stream = new MemoryStream();
 
@@ -27,7 +27,7 @@ namespace SerializatorFox
 
             isCompress = compress;
 
-            appData = ApplicationData.Get(assembly);
+            appData = ApplicationData.Get();
         }
         public void Serialize<T>(T obj)
         {
@@ -63,7 +63,7 @@ namespace SerializatorFox
                 writer.Write(collisionIndex);
             }
 
-            foreach (var field in actualType.GetRuntimeFields())
+            foreach (var field in appData.GetTypeSerializableFields(actualType))
             {
                 if (!appData.IsFieldSerializable(field))
                     continue;
@@ -119,9 +119,8 @@ namespace SerializatorFox
             else if (type == typeof(string))
             {
                 byte[] bytes = Encoding.UTF8.GetBytes((string)value);
-                byte[] invertedBytes = bytes.Select(b => (byte)~b).ToArray();
-                writer.Write(invertedBytes.Length);
-                writer.Write(invertedBytes);
+                writer.Write(bytes.Length);
+                writer.Write(bytes);
             }
             else if (type == typeof(DateTime)) writer.Write(((DateTime)value).Ticks);
             else if (type == typeof(TimeSpan)) writer.Write(((TimeSpan)value).Ticks);
