@@ -192,7 +192,7 @@ namespace SerializatorFox
 
         private void DeserializeFields(Type type, object instance)
         {
-            foreach (var field in type.GetRuntimeFields().Where(f => appData.IsFieldSerializable(f)))
+            foreach (var field in appData.GetTypeSerializableFields(type))
             {
                 DeserializeField(field, instance);
             }
