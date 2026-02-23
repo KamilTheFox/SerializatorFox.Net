@@ -12,6 +12,7 @@ BenchmarkRunner.Run<SerializationBenchmarks>();
 BenchmarkRunner.Run<DeserializationBenchmarks>();
 PayloadSizeReport.Print();
 
+
 // ════════════════════════════════════════════════════════════
 //  Вспомогательные MessagePack-модели (без полиморфизма IItem)
 // ════════════════════════════════════════════════════════════
@@ -148,6 +149,7 @@ public class SerializationBenchmarks
     {
         _foxPlayer = BenchmarkFixtures.CreateFoxPlayer();
         _mpPlayer = BenchmarkFixtures.CreateMPPlayer();
+
     }
 
     [Benchmark(Description = "Fox · без сжатия")]
@@ -201,13 +203,18 @@ public class DeserializationBenchmarks
         var foxPlayer = BenchmarkFixtures.CreateFoxPlayer();
         var mpPlayer = BenchmarkFixtures.CreateMPPlayer();
 
+        var settingsJSON = new JsonSerializerSettings
+        {
+            TypeNameHandling = TypeNameHandling.Auto
+        };
+
         using (var s = new ByteSerialeze(false)) { s.Serialize(foxPlayer); _foxRaw = s.GetData(); }
         using (var s = new ByteSerialeze(true)) { s.Serialize(foxPlayer); _foxCompressed = s.GetData(); }
 
         _mpRaw = MessagePackSerializer.Serialize(mpPlayer);
         _mpLZ4 = MessagePackSerializer.Serialize(mpPlayer,
                             MessagePackSerializerOptions.Standard.WithCompression(MessagePackCompression.Lz4BlockArray));
-        _newtonsoftJson = JsonConvert.SerializeObject(foxPlayer);
+        _newtonsoftJson = JsonConvert.SerializeObject(foxPlayer, settingsJSON);
     }
 
     [Benchmark(Description = "Fox · без сжатия")]

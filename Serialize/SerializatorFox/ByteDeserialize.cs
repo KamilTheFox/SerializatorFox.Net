@@ -17,7 +17,8 @@ namespace SerializatorFox
 
         public ByteDeserializer(byte[] data)
         {
-            if (data[0] == 1)
+            bool isCompress = data[0] == 1;
+            if (isCompress)
             {
                 byte[] result = new byte[data.Length - 1];
                 Array.Copy(data, 1, result, 0, data.Length - 1);
@@ -25,6 +26,7 @@ namespace SerializatorFox
             }
             stream = new MemoryStream(data);
             reader = new BinaryReader(stream);
+            if (isCompress == false) reader.ReadByte();
             appData = ApplicationData.Get();
         }
 
